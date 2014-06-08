@@ -2,6 +2,7 @@ const int PIN_DOWN = 2;
 const int PIN_LEFT = 4;
 const int PIN_RIGHT = 7;
 const int PIN_UP = 8;
+const int PIN_OK = 12;
 
 const int BLOCK_I = 1;
 const int BLOCK_J = 2;
@@ -11,13 +12,15 @@ const int BLOCK_S = 5;
 const int BLOCK_T = 6;
 const int BLOCK_Z = 7;
 
-int buttons = 4;
-int button_pins[] = { PIN_DOWN, PIN_LEFT, PIN_RIGHT, PIN_UP };
-bool button_states[] = { 0, 0, 0, 0 };
+int buttons = 5;
+int button_pins[] = { PIN_DOWN, PIN_LEFT, PIN_RIGHT, PIN_UP, PIN_OK };
+bool button_states[] = { 0, 0, 0, 0, 0 };
 
 int board_height = 16;
 int board_width = 8;
 bool board[16][8];
+
+//bool block
 
 int loop_counter = 0;
 
@@ -57,11 +60,11 @@ void loop() {
 // -------------------------------------
 
 void generate_block() {
-  
+  ;
 }
 
 void move_down() {
-  
+  ;
 }
 
 bool can_move_down() {
