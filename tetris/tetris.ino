@@ -36,7 +36,11 @@ int pile_layer[16][8] = {0};
 int block_layer[18][8] = {0}; // two rows taller than board
 
 // auto-drop delay
-int loop_counter = 0;
+long loop_timer = 0;
+int down_interval = 500; // ms
+
+//long button_timer = 0;
+//int 
 
 // current_block
 int current_block_type = 0;
@@ -55,6 +59,12 @@ Adafruit_BicolorMatrix matrix_upper = Adafruit_BicolorMatrix();
 Adafruit_BicolorMatrix matrix_lower = Adafruit_BicolorMatrix();
 int matrix_brightness = 1;
 
+// game scoring
+int rows_cleared = 0;
+int tetris_cleared = 0;
+int level = 0;
+int level_up_in = 0;
+
 
 // --------------------------------
 
@@ -68,10 +78,12 @@ void setup() {
   digitalWrite(13, LOW);
   
   matrix_upper.begin(0x70);
+  matrix_upper.setBrightness(matrix_brightness);
   matrix_upper.clear();
   matrix_upper.writeDisplay();
   
   matrix_lower.begin(0x71);
+  matrix_lower.setBrightness(matrix_brightness);
   matrix_lower.clear();
   matrix_lower.writeDisplay();
 
@@ -83,14 +95,18 @@ void setup() {
 void loop() {
   read_buttons();
 
-  loop_counter++;
-  if (loop_counter == 100) {
+  if (loop_timer < millis()) {
+    reset_loop_timer();
+    
     move_down();
     update_display();
-    loop_counter = 0;
   }
+  
+  delay(10);
+}
 
-  delay(5); // 100hz
+void reset_loop_timer() {
+  loop_timer = millis() + down_interval;
 }
 
 // -------------------------------------
@@ -98,9 +114,9 @@ void loop() {
 void reset_game() {
   randomSeed(analogRead(0));
   
-  loop_counter = 0;
-  
   current_block_type = 0;
+  down_interval = 500;
+  level = 0;
   
   for (int y = 15; y >= 0; y--) {
     for (int x = 0; x < 8; x++) {
@@ -130,8 +146,40 @@ void reset_game() {
 //      pile_layer[y][x] = random(1, 4);
 //    }
 //  }
+
+  level_up();
   
   generate_block();
+}
+
+
+void level_up() {
+  level++;
+  level_up_in = 10;
+  down_interval = 500 - (level * 40);
+  
+  delay(200);
+  
+  matrix_lower.setTextWrap(false);
+  matrix_lower.setTextSize(1);
+  matrix_lower.setTextColor(LED_YELLOW);
+  matrix_lower.clear();
+  matrix_lower.setCursor(2,0);
+  matrix_lower.print(level);
+  matrix_lower.writeDisplay();
+  
+  matrix_upper.setTextWrap(false);
+  matrix_upper.setTextSize(1);
+  matrix_upper.setTextColor(LED_YELLOW);
+  for (int8_t x=7; x>=-30; x--) {
+    matrix_upper.clear();
+    matrix_upper.setCursor(x,0);
+    matrix_upper.print("Level");
+    matrix_upper.writeDisplay();
+    delay(60);
+  }
+  
+  delay(200);
 }
 
 
@@ -400,7 +448,7 @@ void generate_block() {
     }
   }
   
-  Serial.println(free_sram());
+//  Serial.println(free_sram());
 }
 
 // -----------------------------------
@@ -408,7 +456,6 @@ void generate_block() {
 void move_down() {
   if (can_move_down()) {
     current_block_y--;
-    loop_counter = 0;
   }
   else {
     if (is_game_over()) {
@@ -561,10 +608,53 @@ bool can_move_right() {
 // -------------------------------------
 
 void rotate() {
-  current_block_rotation++;
-  if (current_block_rotation > 3) {
-    current_block_rotation = 0;
+  if (can_rotate()) {
+    current_block_rotation = (current_block_rotation + 1) % 4;
   }
+}
+
+bool can_rotate() {
+  int new_block_rotation = (current_block_rotation + 1) % 4;
+  
+  // detect wall hit
+  int x_lowest = 0;
+  for (int x = 3; x >= 0; x--) {
+    for (int y = 3; y >= 0; y--) {
+      if (current_block_shape[new_block_rotation][y][x] > 0) {
+        x_lowest = x;
+      }
+    }
+  }
+  if (current_block_x + x_lowest < 0) {
+    return false;
+  }
+  
+  int x_highest = 0;
+  for (int x = 0; x < 4; x++) {
+    for (int y = 3; y >= 0; y--) {
+      if (current_block_shape[new_block_rotation][y][x] > 0) {
+        x_highest = x;
+      }
+    }
+  }
+  if (current_block_x + x_highest >= board_width) {
+    return false;
+  }
+  
+  // detect block collision
+  for (int y = 3; y >= 0; y--) {
+    for (int x = 0; x < 4; x++) {
+      if (current_block_shape[new_block_rotation][y][x] > 0) {
+        int collision_y = current_block_y + y;
+        int collision_x = current_block_x + x;
+        if (pile_layer[collision_y][collision_x] > 0) {
+          return false;
+        }
+      }
+    }
+  }
+  
+  return true;
 }
 
 // -------------------------------------
@@ -586,8 +676,12 @@ void check_rows() {
     }
   }
   
+  // add sum to global total
+  rows_cleared += full_rows;
+  
+  // check if it is tetris!
   if (full_rows == 4) {
-    // that's TETRIS!
+    tetris_cleared++;
   }
     
   // rem full rows
@@ -632,6 +726,12 @@ void check_rows() {
       }
     }
   }
+  
+  // level up?
+  level_up_in -= full_rows;
+  if (level_up_in < 0) {
+    level_up();
+  }
 }
 
 // -------------------------------------
@@ -669,18 +769,22 @@ void button_press(int pin) {
   switch (pin) {
 
     case PIN_DOWN:
+      reset_loop_timer();
       move_down();
       break;
 
     case PIN_UP:
+      reset_loop_timer();
       rotate();
       break;
 
     case PIN_LEFT:
+      reset_loop_timer();
       move_left();
       break;
       
     case PIN_RIGHT:
+      reset_loop_timer();
       move_right();
       break;
 
@@ -711,7 +815,13 @@ void button_release(int pin) {
 
 
 void button_down(int pin) {
-  ;
+  switch (pin) {
+  
+    case PIN_DOWN:
+      //move_down();
+      break;
+      
+  }
 }
 
 
@@ -756,12 +866,6 @@ void move_block_layer_to_pile_layer() {
   }
   clear_block_layer();
   current_block_type = 0;
-}
-
-
-
-void start() {
-  generate_block();
 }
 
 
@@ -845,33 +949,32 @@ int block_to_led_colour(int block) {
 
 
 
-void serial_display() {
-  for (int y = board_height - 1; y >= 0; y--) {
-    for (int x = 0; x < board_width; x++) {
-      Serial.print((board[y][x] > 0) ? String(board[y][x]) : "-");
-//      Serial.print((board[y][x] > 0) ? "#" : "-");
-      Serial.print(" ");
-    }
-    Serial.println();
-  }
-
-  Serial.println();
-
-  for (int i = 0; i < button_count; i++) {
-    Serial.print(button_pins[i]);
-    Serial.print("(");
-    Serial.print(button_states[i] ? "#" : ".");
-    Serial.print(") ");
-  }
-
-  Serial.println();
-  Serial.println();
-}
-
+//void serial_display() {
+//  for (int y = board_height - 1; y >= 0; y--) {
+//    for (int x = 0; x < board_width; x++) {
+//      Serial.print((board[y][x] > 0) ? String(board[y][x]) : "-");
+//      Serial.print(" ");
+//    }
+//    Serial.println();
+//  }
+//
+//  Serial.println();
+//
+//  for (int i = 0; i < button_count; i++) {
+//    Serial.print(button_pins[i]);
+//    Serial.print("(");
+//    Serial.print(button_states[i] ? "#" : ".");
+//    Serial.print(") ");
+//  }
+//
+//  Serial.println();
+//  Serial.println();
+//}
 
 
-int free_sram() {
-  extern int __heap_start, *__brkval; 
-  int v; 
-  return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval); 
-}
+
+//int free_sram() {
+//  extern int __heap_start, *__brkval; 
+//  int v; 
+//  return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval); 
+//}
