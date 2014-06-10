@@ -53,7 +53,7 @@ int current_block_rotation = 0;
 // LED displays
 Adafruit_BicolorMatrix matrix_upper = Adafruit_BicolorMatrix();
 Adafruit_BicolorMatrix matrix_lower = Adafruit_BicolorMatrix();
-int const led_brightness = 1;
+int matrix_brightness = 10;
 
 
 // --------------------------------
@@ -68,7 +68,12 @@ void setup() {
   digitalWrite(13, LOW);
   
   matrix_upper.begin(0x70);
+  matrix_upper.clear();
+  matrix_upper.writeDisplay();
+  
   matrix_lower.begin(0x71);
+  matrix_lower.clear();
+  matrix_lower.writeDisplay();
 
   reset_game();
 }
@@ -89,6 +94,46 @@ void loop() {
 }
 
 // -------------------------------------
+
+void reset_game() {
+  randomSeed(analogRead(0));
+  
+  loop_counter = 0;
+  
+  current_block_type = 0;
+  
+  for (int y = 15; y >= 0; y--) {
+    for (int x = 0; x < 8; x++) {
+      pile_layer[y][x] = random(1, 4);
+    }
+    update_display();
+    delay(20);
+  }
+  
+  for (int y = 15; y >= 0; y--) {
+    for (int x = 0; x < 8; x++) {
+      pile_layer[y][x] = 0;
+    }
+    update_display();
+    delay(20);
+  }
+  
+  clear_board();
+  clear_pile_layer();
+  clear_block_layer();
+  
+  delay(1000);
+  
+  for (int y = 0; y < 4; y++) {
+    for (int x = 0; x < 8; x++) {
+      pile_layer[y][x] = random(1, 4);
+    }
+  }
+  
+  generate_block();
+}
+
+
 
 void generate_block() {
   current_block_type = random(0, 7) + 1; // 1 - 7
@@ -366,23 +411,11 @@ void move_down() {
   }
   else {
     if (is_game_over()) {
-      move_block_layer_to_pile_layer();
-      delay(1000);
-      
-      for (int y = 15; y >= 0; y--) {
-        for (int x = 0; x < 8; x++) {
-          pile_layer[y][x] = 0;
-        }
-        update_display();
-        delay(100);
-      }
-      
-      delay(1000);
-      reset_game();
+      game_over();
     }
     else {
       move_block_layer_to_pile_layer();
-      check_lines();
+      check_rows();
       generate_block();
     }
   }
@@ -432,6 +465,12 @@ bool is_game_over() {
   return false;
 }
 
+void game_over() {
+  move_block_layer_to_pile_layer();
+  delay(1000);
+  reset_game();
+}
+
 // -------------------------------------
 
 void move_left() {
@@ -471,89 +510,64 @@ void rotate() {
 
 // -------------------------------------
 
-void check_lines() {
-  int full_lines = 0;
-  int full_line_numbers[4];
+void check_rows() {
+  int full_rows = 0;
+  int full_row_numbers[4] = {0};
   
   for (int y = 0; y < 16; y++) {
-    int line_sum = 0;
+    int row_sum = 0;
     for (int x = 0; x < 8; x++) {
-      if (pile_layer[y][x] > 0) line_sum++;
+      if (pile_layer[y][x] > 0) {
+        row_sum++;
+      }
     }
-    if (line_sum == 8) {
-      full_line_numbers[full_lines] = y;
-      full_lines++;
+    if (row_sum == 8) {
+      full_row_numbers[full_rows] = y;
+      full_rows++;
     }
   }
   
-  Serial.print("full_lines: ");
-  Serial.println(full_lines);
-  
-  // randomise lines
-//  for (int n = 0; n < 20; n++) {
-//    for (int i = full_lines - 1; i >= 0; i--) {
-//      int y = full_line_numbers[i];
-//      for (int x = 0; x < 8; x++) {
-//        pile_layer[y][x] = random(0, 4);
-//      }
-//    }
-//    update_display();
-//    delay(20);
-//  }
+  if (full_rows == 4) {
+    // that's TETRIS!
+  }
     
-  // flash lines
-  for (int n = full_lines - 1; n >= 0; n--) {
-    int full_y = full_line_numbers[n];
-    
-    int line[8];
+  // rem full rows
+  int row[4][8] = {0};
+  for (int n = 0; n < full_rows; n++) {
+    int y = full_row_numbers[n];
     for (int x = 0; x < 8; x++) {
-      line[x] = pile_layer[full_y][x];
+      row[n][x] = pile_layer[y][x];
+    }
+  }
+    
+  // flash full rows
+  for (int n = 0; n < 4; n++) {
+    
+    for (int n = 0; n < full_rows; n++) {
+      int full_row_y = full_row_numbers[n];
+      for (int x = 0; x < 8; x++) {
+        pile_layer[full_row_y][x] = 0;      
+      }
     }
     
-    for (int x = 0; x < 8; x++) {
-      pile_layer[full_y][x] = 0;      
-    }
     update_display();
-    delay(50);
+    delay(40);
     
-    for (int x = 0; x < 8; x++) {
-      pile_layer[full_y][x] = line[x];
+    for (int n = 0; n < full_rows; n++) {
+      int full_row_y = full_row_numbers[n];
+      for (int x = 0; x < 8; x++) {
+        pile_layer[full_row_y][x] = row[n][x];
+      }
     }
-    update_display();
-    delay(50);
     
-    for (int x = 0; x < 8; x++) {
-      pile_layer[full_y][x] = 0;      
-    }
     update_display();
-    delay(50);
+    delay(40);
+  }
     
-    for (int x = 0; x < 8; x++) {
-      pile_layer[full_y][x] = line[x];
-    }
-    update_display();
-    delay(50);
-    
-    for (int x = 0; x < 8; x++) {
-      pile_layer[full_y][x] = 0;      
-    }
-    update_display();
-    delay(50);
-    
-    for (int x = 0; x < 8; x++) {
-      pile_layer[full_y][x] = line[x];
-    }
-    update_display();
-    delay(50);
-    
-    for (int x = 0; x < 8; x++) {
-      pile_layer[full_y][x] = 0;      
-    }
-    update_display();
-    delay(50);
-   
+  for (int n = (full_rows - 1); n >= 0; n--) { 
+    int full_row_y = full_row_numbers[n];
     // move row down 
-    for (int y = full_y; y < 15; y++) {
+    for (int y = full_row_y; y < 15; y++) {
       for (int x = 0; x < 8; x++) {
         pile_layer[y][x] = pile_layer[y+1][x];
       }
@@ -639,23 +653,6 @@ void button_release(int pin) {
 
 void button_down(int pin) {
   ;
-}
-
-
-
-void reset_game() {
-  loop_counter = 0;
-  clear_board();
-  clear_pile_layer();
-  clear_block_layer();
-  
-  for (int y = 0; y < 4; y++) {
-    for (int x = 0; x < 8; x++) {
-      pile_layer[y][x] = random(0, 3) + 1;
-    }
-  }
-  
-  generate_block();
 }
 
 
@@ -763,7 +760,7 @@ void led_display() {
       matrix_upper.drawPixel(x, 7-y, colour);
     }
   }
-  matrix_upper.setBrightness(led_brightness);
+  matrix_upper.setBrightness(matrix_brightness);
   matrix_upper.writeDisplay();
   
   matrix_lower.clear();
@@ -773,7 +770,7 @@ void led_display() {
       matrix_lower.drawPixel(x, 7-y, colour);
     }
   }
-  matrix_lower.setBrightness(led_brightness);
+  matrix_lower.setBrightness(matrix_brightness);
   matrix_lower.writeDisplay();
 }
 
