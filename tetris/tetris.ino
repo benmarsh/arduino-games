@@ -53,7 +53,7 @@ int current_block_rotation = 0;
 // LED displays
 Adafruit_BicolorMatrix matrix_upper = Adafruit_BicolorMatrix();
 Adafruit_BicolorMatrix matrix_lower = Adafruit_BicolorMatrix();
-int matrix_brightness = 10;
+int matrix_brightness = 1;
 
 
 // --------------------------------
@@ -84,7 +84,7 @@ void loop() {
   read_buttons();
 
   loop_counter++;
-  if (loop_counter == 50) {
+  if (loop_counter == 100) {
     move_down();
     update_display();
     loop_counter = 0;
@@ -124,11 +124,12 @@ void reset_game() {
   
   delay(1000);
   
-  for (int y = 0; y < 4; y++) {
-    for (int x = 0; x < 8; x++) {
-      pile_layer[y][x] = random(1, 4);
-    }
-  }
+  // fill lower 4 rows
+//  for (int y = 0; y < 4; y++) {
+//    for (int x = 0; x < 8; x++) {
+//      pile_layer[y][x] = random(1, 4);
+//    }
+//  }
   
   generate_block();
 }
@@ -482,6 +483,35 @@ void move_left() {
 
 
 bool can_move_left() {
+  int new_block_x = current_block_x - 1;
+  
+  // detect wall hit
+  int x_lowest = 0;
+  for (int x = 3; x >= 0; x--) {
+    for (int y = 3; y >= 0; y--) {
+      if (current_block_shape[current_block_rotation][y][x] > 0) {
+        x_lowest = x;
+      }
+    }
+  }
+  if (new_block_x + x_lowest < 0) {
+    return false;
+  }
+  
+  // detect block collision
+  for (int y = 3; y >= 0; y--) {
+    for (int x = 0; x < 4; x++) {
+      if (current_block_shape[current_block_rotation][y][x] > 0) {
+        int collision_y = current_block_y + y;
+        int collision_x = new_block_x + x;
+        if (pile_layer[collision_y][collision_x] > 0) {
+          return false;
+        }
+      }
+    }
+  }
+  
+  // all clear
   return true;
 }
 
@@ -496,6 +526,35 @@ void move_right() {
 
 
 bool can_move_right() {
+  int new_block_x = current_block_x + 1;
+  
+  // detect wall hit
+  int x_highest = 0;
+  for (int x = 0; x < 4; x++) {
+    for (int y = 3; y >= 0; y--) {
+      if (current_block_shape[current_block_rotation][y][x] > 0) {
+        x_highest = x;
+      }
+    }
+  }
+  if (new_block_x + x_highest >= board_width) {
+    return false;
+  }
+  
+  // detect block collision
+  for (int y = 3; y >= 0; y--) {
+    for (int x = 0; x < 4; x++) {
+      if (current_block_shape[current_block_rotation][y][x] > 0) {
+        int collision_y = current_block_y + y;
+        int collision_x = new_block_x + x;
+        if (pile_layer[collision_y][collision_x] > 0) {
+          return false;
+        }
+      }
+    }
+  }
+  
+  // all clear
   return true;
 }
 
