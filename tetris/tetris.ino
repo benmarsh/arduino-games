@@ -4,67 +4,67 @@
 
 // Origin 0x0 is bottom left
 
-const int PIN_DOWN = 4;
-const int PIN_LEFT = 5;
-const int PIN_RIGHT = 7;
-const int PIN_UP = 8;
-const int PIN_OK = 12;
+const byte PIN_DOWN = 4;
+const byte PIN_LEFT = 5;
+const byte PIN_RIGHT = 7;
+const byte PIN_UP = 8;
+const byte PIN_A = 12; // rotate clockwise
+const byte PIN_B = 11; // rotate anti-clockwise
 
-const int BLOCK_I = 1;
-const int BLOCK_J = 2;
-const int BLOCK_L = 3;
-const int BLOCK_O = 4;
-const int BLOCK_S = 5;
-const int BLOCK_T = 6;
-const int BLOCK_Z = 7;
+const byte BLOCK_I = 1;
+const byte BLOCK_J = 2;
+const byte BLOCK_L = 3;
+const byte BLOCK_O = 4;
+const byte BLOCK_S = 5;
+const byte BLOCK_T = 6;
+const byte BLOCK_Z = 7;
 
-const int button_count = 5;
-const int button_pins[] = { PIN_DOWN, PIN_LEFT, PIN_RIGHT, PIN_UP, PIN_OK };
-bool button_states[] = { 0, 0, 0, 0, 0 };
+const byte button_count = 6;
+const byte button_pins[] = { PIN_DOWN, PIN_LEFT, PIN_RIGHT, PIN_UP, PIN_B, PIN_A };
+bool button_states[] = { 0, 0, 0, 0, 0, 0 };
 
-const int board_height = 16;
-const int board_width = 8;
+const byte board_height = 16;
+const byte board_width = 8;
 
 // display board array
 // int array to handle colours
-int board[16][8] = {0};
+byte board[16][8] = {0};
 
 // Pile layer
-int pile_layer[16][8] = {0};
+byte pile_layer[16][8] = {0};
 
 // Block layer
-int block_layer[18][8] = {0}; // two rows taller than board
+byte block_layer[18][8] = {0}; // two rows taller than board
 
 // auto-drop delay
-long loop_timer = 0;
-int down_interval = 500; // ms
+unsigned long loop_timer = 0;
+unsigned int down_interval = 500; // ms
 
 //long button_timer = 0;
 //int 
 
 // current_block
-int current_block_type = 0;
+byte current_block_type = 0;
 
 // current_block_shape[rotation][y][x]
-int current_block_shape[4][4][4] = {0};
+byte current_block_shape[4][4][4] = {0};
 
-int current_block_x = 0;
-int current_block_y = 0;
+int current_block_x = 2;
+int current_block_y = 14;
 
 // current_block_rotation = 0-3
-int current_block_rotation = 0;
+byte current_block_rotation = 0;
 
 // LED displays
 Adafruit_BicolorMatrix matrix_upper = Adafruit_BicolorMatrix();
 Adafruit_BicolorMatrix matrix_lower = Adafruit_BicolorMatrix();
-int matrix_brightness = 1;
+byte matrix_brightness = 10;
 
 // game scoring
-int rows_cleared = 0;
-int tetris_cleared = 0;
-int level = 0;
-int level_up_in = 0;
-
+int rows_cleared;
+int tetris_cleared;
+int level;
+int level_up_in;
 
 // --------------------------------
 
@@ -105,6 +105,8 @@ void loop() {
   delay(10);
 }
 
+
+
 void reset_loop_timer() {
   loop_timer = millis() + down_interval;
 }
@@ -117,6 +119,9 @@ void reset_game() {
   current_block_type = 0;
   down_interval = 500;
   level = 0;
+  level_up_in = 10;
+  rows_cleared = 0;
+  tetris_cleared = 0;
   
   for (int y = 15; y >= 0; y--) {
     for (int x = 0; x < 8; x++) {
@@ -179,7 +184,7 @@ void level_up() {
     delay(60);
   }
   
-  delay(200);
+  delay(100);
 }
 
 
@@ -465,6 +470,9 @@ void move_down() {
       move_block_layer_to_pile_layer();
       check_rows();
       generate_block();
+      
+      Serial.print("Score: ");
+      Serial.println(rows_cleared);
     }
   }
 }
@@ -506,12 +514,24 @@ bool can_move_down() {
 
 
 
+void drop_down() {
+  while (can_move_down()) {
+    move_down();
+    update_display();
+    //delay(20);
+  }
+}
+
+// ---------------------------------------------
+
 bool is_game_over() {
   if (!can_move_down() && current_block_y == 14) {
     return true;
   }
   return false;
 }
+
+
 
 void game_over() {
   move_block_layer_to_pile_layer();
@@ -607,14 +627,66 @@ bool can_move_right() {
 
 // -------------------------------------
 
-void rotate() {
-  if (can_rotate()) {
+void rotate_clockwise() {
+  if (can_rotate_clockwise()) {
     current_block_rotation = (current_block_rotation + 1) % 4;
   }
 }
 
-bool can_rotate() {
+bool can_rotate_clockwise() {
   int new_block_rotation = (current_block_rotation + 1) % 4;
+  
+  // detect wall hit
+  int x_lowest = 0;
+  for (int x = 3; x >= 0; x--) {
+    for (int y = 3; y >= 0; y--) {
+      if (current_block_shape[new_block_rotation][y][x] > 0) {
+        x_lowest = x;
+      }
+    }
+  }
+  if (current_block_x + x_lowest < 0) {
+    return false;
+  }
+  
+  int x_highest = 0;
+  for (int x = 0; x < 4; x++) {
+    for (int y = 3; y >= 0; y--) {
+      if (current_block_shape[new_block_rotation][y][x] > 0) {
+        x_highest = x;
+      }
+    }
+  }
+  if (current_block_x + x_highest >= board_width) {
+    return false;
+  }
+  
+  // detect block collision
+  for (int y = 3; y >= 0; y--) {
+    for (int x = 0; x < 4; x++) {
+      if (current_block_shape[new_block_rotation][y][x] > 0) {
+        int collision_y = current_block_y + y;
+        int collision_x = current_block_x + x;
+        if (pile_layer[collision_y][collision_x] > 0) {
+          return false;
+        }
+      }
+    }
+  }
+  
+  return true;
+}
+
+// -------------------------------------
+
+void rotate_anti_clockwise() {
+  if (can_rotate_anti_clockwise()) {
+    current_block_rotation = (current_block_rotation + 4 - 1) % 4;
+  }
+}
+
+bool can_rotate_anti_clockwise() {
+  int new_block_rotation = (current_block_rotation + 4 - 1) % 4;
   
   // detect wall hit
   int x_lowest = 0;
@@ -737,11 +809,11 @@ void check_rows() {
 // -------------------------------------
 
 void read_buttons() {
-  for (int i = 0; i < button_count; i++) {
+  for (byte i = 0; i < button_count; i++) {
 
-    int pin = button_pins[i];
+    byte pin = button_pins[i];
 
-    int state = digitalRead(pin);
+    bool state = digitalRead(pin);
 
     if (button_states[i] != state) {
       button_states[i] = state;
@@ -763,11 +835,9 @@ void read_buttons() {
 
 
 
-void button_press(int pin) {
-  digitalWrite(13, HIGH);
-
+void button_press(byte pin) {
   switch (pin) {
-
+    
     case PIN_DOWN:
       reset_loop_timer();
       move_down();
@@ -775,7 +845,7 @@ void button_press(int pin) {
 
     case PIN_UP:
       reset_loop_timer();
-      rotate();
+      drop_down();
       break;
 
     case PIN_LEFT:
@@ -788,21 +858,24 @@ void button_press(int pin) {
       move_right();
       break;
 
-    case PIN_OK:
-      reset_game();
-      
+    case PIN_A:
+      reset_loop_timer();
+      rotate_clockwise();
       break;
-
+    
+    case PIN_B:
+      reset_loop_timer();
+      rotate_anti_clockwise();
+      break;
+      
   }
-
+  
   update_display();
 }
 
 
 
-void button_release(int pin) {
-  digitalWrite(13, LOW);
-
+void button_release(byte pin) {
   switch (pin) {
 
     case PIN_DOWN:
@@ -814,7 +887,7 @@ void button_release(int pin) {
 
 
 
-void button_down(int pin) {
+void button_down(byte pin) {
   switch (pin) {
   
     case PIN_DOWN:
@@ -824,7 +897,7 @@ void button_down(int pin) {
   }
 }
 
-
+// ----------------------------------
 
 void clear_board() {
   for (int y = board_height - 1; y >= 0; y--) {
