@@ -38,10 +38,14 @@ byte block_layer[18][8] = {0}; // two rows taller than board
 
 // auto-drop delay
 unsigned long loop_timer = 0;
-unsigned int down_interval = 500; // ms
+unsigned int initial_loop_interval = 900;
+unsigned int loop_interval; // ms
 
-//long button_timer = 0;
-//int 
+unsigned long down_timer = 0;
+unsigned int down_interval = 90;
+
+unsigned long left_right_timer = 0;
+unsigned int left_right_interval = 180;
 
 // current_block
 byte current_block_type = 0;
@@ -108,7 +112,7 @@ void loop() {
 
 
 void reset_loop_timer() {
-  loop_timer = millis() + down_interval;
+  loop_timer = millis() + loop_interval;
 }
 
 // -------------------------------------
@@ -117,13 +121,13 @@ void reset_game() {
   randomSeed(analogRead(0));
   
   current_block_type = 0;
-  down_interval = 500;
+  loop_interval = initial_loop_interval;
   level = 0;
   level_up_in = 10;
   rows_cleared = 0;
   tetris_cleared = 0;
   
-  for (int y = 15; y >= 0; y--) {
+  for (int y = 0; y < 16; y++) {
     for (int x = 0; x < 8; x++) {
       pile_layer[y][x] = random(1, 4);
     }
@@ -131,7 +135,7 @@ void reset_game() {
     delay(20);
   }
   
-  for (int y = 15; y >= 0; y--) {
+  for (int y = 0; y < 16; y++) {
     for (int x = 0; x < 8; x++) {
       pile_layer[y][x] = 0;
     }
@@ -161,7 +165,7 @@ void reset_game() {
 void level_up() {
   level++;
   level_up_in = 10;
-  down_interval = 500 - (level * 40);
+  loop_interval = initial_loop_interval - (level * 50);
   
   delay(200);
   
@@ -518,7 +522,8 @@ void drop_down() {
   while (can_move_down()) {
     move_down();
     update_display();
-    //delay(20);
+    reset_loop_timer();
+    delay(10);
   }
 }
 
@@ -838,8 +843,8 @@ void read_buttons() {
 void button_press(byte pin) {
   switch (pin) {
     
-    case PIN_DOWN:
-      reset_loop_timer();
+    case PIN_DOWN:     
+      reset_down_timer();
       move_down();
       break;
 
@@ -849,23 +854,23 @@ void button_press(byte pin) {
       break;
 
     case PIN_LEFT:
-      reset_loop_timer();
+      reset_left_right_timer();
       move_left();
       break;
       
     case PIN_RIGHT:
-      reset_loop_timer();
+      reset_left_right_timer();
       move_right();
       break;
 
     case PIN_A:
-      reset_loop_timer();
-      rotate_clockwise();
+      //reset_loop_timer();
+      rotate_anti_clockwise();
       break;
     
     case PIN_B:
-      reset_loop_timer();
-      rotate_anti_clockwise();
+      //reset_loop_timer();
+      rotate_clockwise();
       break;
       
   }
@@ -876,25 +881,51 @@ void button_press(byte pin) {
 
 
 void button_release(byte pin) {
-  switch (pin) {
-
-    case PIN_DOWN:
-      //
-      break;
-
-  }
+ //
 }
 
 
 
 void button_down(byte pin) {
   switch (pin) {
-  
+    
     case PIN_DOWN:
-      //move_down();
+      if (down_timer < millis()) {
+        reset_down_timer();
+        move_down();
+        update_display();
+      }
       break;
       
+    case PIN_LEFT:
+      if (left_right_timer < millis()) {
+        reset_left_right_timer();
+        move_left();
+        update_display();
+      }
+      break;
+      
+    case PIN_RIGHT:
+      if (left_right_timer < millis()) {
+        reset_left_right_timer();
+        move_right();
+        update_display();
+      }
+      break;
+    
   }
+}
+
+
+
+void reset_down_timer() {
+   down_timer = millis() + down_interval;
+}
+
+
+
+void reset_left_right_timer() {
+  left_right_timer = millis() + left_right_interval;
 }
 
 // ----------------------------------
